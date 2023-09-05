@@ -1,0 +1,14 @@
+__mocks__/
+__tests__/
+.github/
+src/
+tests/
+.gitignore
+.npmignore
+.env
+tsconfig.json
+logs/
+node_modules/
+__fixtures__/
+build/__mocks__/
+build/__tests__/
