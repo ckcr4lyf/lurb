@@ -11,6 +11,7 @@
         "sourceMap": true,
         "moduleResolution": "node",
         "declaration": true,
+        "strict": true,
     },
     "include": [
         "src/**/*",
