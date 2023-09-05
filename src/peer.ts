@@ -2,8 +2,8 @@ import { Socket } from "net";
 import { getLogger } from "./logger.js";
 
 type Resolver = {
-    resolve: () => undefined,
-    reject: () => undefined,
+    resolve: (v: unknown) => void,
+    reject: (e?: any) => void,
 };
 
 enum PeerStatus {
@@ -56,11 +56,44 @@ export class Peer {
     }
 
     handleRecv(data: Buffer){
+        const logger = getLogger();
+
         this.recvBuffer = Buffer.concat([this.recvBuffer, data]);
-        console.log(this.recvBuffer);
+        // console.log(this.recvBuffer);
+
         if (this.status === PeerStatus.HANDSHAKING){
             // A handshake reply should be at least 68 bytes(?)
-            // TODO: Parse/ handle.
+            if (this.recvBuffer.length < 68){
+                return;
+            }
+
+            // Make sure it is a legit handshake
+            const potentialHandshake = this.recvBuffer.subarray(0, 68);
+            if (potentialHandshake[0] !== 0x13){
+                logger.error(`First byte not 0x13, dodgy!`);
+                this.resolver.reject(new Error("INVALID_HANDSHAKE"));
+            }
+
+            if (Buffer.compare(potentialHandshake.subarray(1, 20), Buffer.from("BitTorrent protocol")) !== 0){
+                logger.error(`Did not receive "BitTorrent protocol" in Handshake message, dodgy!`);
+                this.resolver.reject(new Error("INVALID_HANDSHAKE"));
+            }
+
+            const extensions = potentialHandshake.subarray(20, 28);
+            const infohash = potentialHandshake.subarray(28, 48);
+            const peerId = potentialHandshake.subarray(48, 68);
+
+            if (Buffer.compare(infohash, this.infohash) !== 0){
+                logger.error(`Did not receive expected infohash!`);
+                this.resolver.reject(new Error("INVALID_HANDSHAKE"));
+            }
+
+            logger.debug(`Received peerId: ${peerId.toString()}`);
+            this.recvBuffer = this.recvBuffer.subarray(68);
+            this.status = PeerStatus.IDLE;
+            this.resolver.resolve(undefined);
+        } else {
+            console.log(`Recv Buffer: `, this.recvBuffer);
         }
     }
 
@@ -68,7 +101,7 @@ export class Peer {
         const logger = getLogger();
         this.status = PeerStatus.HANDSHAKING;
         this.infohash = infohash;
-        logger.info(`Connecting to ${this.host}:${this.port},,,`);
+        logger.debug(`Connecting to ${this.host}:${this.port},,,`);
 
         const connectPromise = new Promise((resolve, reject) => {
             this.client.once('error', (e) => {
@@ -95,6 +128,24 @@ export class Peer {
             this.peerId,
         ]);
 
+        const handshakePromise = new Promise((resolve, reject) => {
+            this.resolver = { resolve , reject };
+        });
+
+        logger.debug(`Going to send handshake`);
         this.client.write(handshakeMessage);
+
+        logger.debug(`Going to wait for reply`);
+
+        try {
+            await handshakePromise;
+            logger.info(`Recevied handshake! (Success)`);
+        } catch (e){
+            logger.error(`Failed to handshake: ${e}`);
+        }
+    }
+
+    async end(){
+        this.client.end();
     }
 }

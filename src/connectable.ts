@@ -9,4 +9,5 @@ export const connectable = async(host: string, port: string, hash: string) => {
     // Then most implementations will send FIN. Upto the user
     // to make sure the hash exists in BT
     await peer.handshake(Buffer.from(hash, "hex"));
+    await peer.end();
 }
