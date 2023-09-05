@@ -1,8 +1,15 @@
-# typescript-base
+# lurb
 
-A base which makes it easy for me to initialize typescript projects. Includes:
+lurb is a utility for testing BitTorrent clients.
 
-* `tsconfig.json`
-* `ava` for testing
-* Tests written in typescript, compiled to JS for the runner
-* Example test
+## Installation
+
+With npm:
+
+```
+npm i -g lurb
+```
+
+## Supported Features
+
+* Connecting to a peer via TCP and performing a handshake

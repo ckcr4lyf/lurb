@@ -1,5 +1,5 @@
 {
-  "name": "bttest",
+  "name": "lurb",
   "version": "0.0.1",
   "description": "Utility for testing BitTorrent setups",
   "main": "./bin/index.mjs",
@@ -40,7 +40,7 @@
   },
   "preferGlobal": true,
   "bin": {
-    "bttest": "./bin/index.mjs"
+    "lurb": "./bin/index.mjs"
   },
   "dependencies": {
     "@ckcr4lyf/logger": "^0.0.5",
