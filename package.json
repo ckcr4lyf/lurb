@@ -1,6 +1,6 @@
 {
   "name": "lurb",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Utility for testing BitTorrent setups",
   "main": "./bin/index.mjs",
   "type": "module",
