@@ -1,8 +1,8 @@
 {
-  "name": "typescript-base",
+  "name": "bttest",
   "version": "0.0.1",
-  "description": "My base for typescript projects",
-  "main": "index.js",
+  "description": "Utility for testing BitTorrent setups",
+  "main": "./bin/index.mjs",
   "type": "module",
   "scripts": {
     "build": "rm -rf build/ && tsc",
@@ -10,17 +10,17 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ckcr4lyf/typescript-base.git"
+    "url": "git+https://github.com/ckcr4lyf/bttest.git"
   },
   "keywords": [
-    "typescript"
+    "bittorrent"
   ],
   "author": "Raghu Saxena",
-  "license": "MIT",
+  "license": "GPL-3.0",
   "bugs": {
-    "url": "https://github.com/ckcr4lyf/typescript-base/issues"
+    "url": "https://github.com/ckcr4lyf/bttest/issues"
   },
-  "homepage": "https://github.com/ckcr4lyf/typescript-base#readme",
+  "homepage": "https://github.com/ckcr4lyf/bttest#readme",
   "devDependencies": {
     "@ava/typescript": "^3.0.1",
     "ava": "^5.1.0",
@@ -37,5 +37,9 @@
       },
       "compile": false
     }
+  },
+  "preferGlobal": true,
+  "bin": {
+    "bttest": "./bin/index.mjs"
   }
 }
