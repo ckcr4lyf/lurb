@@ -41,5 +41,9 @@
   "preferGlobal": true,
   "bin": {
     "bttest": "./bin/index.mjs"
+  },
+  "dependencies": {
+    "@ckcr4lyf/logger": "^0.0.5",
+    "commander": "^11.0.0"
   }
 }
