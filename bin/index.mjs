@@ -8,7 +8,7 @@ const logger = new Logger({ loglevel: LOGLEVEL.DEBUG });
 
 const program = new Command();
 
-program.command('connectable').description('Check if your client is connectable')
+program.command('handshake').description('Check if your client is connectable, and perform a handshake for a given infohash')
 .requiredOption('-h, --host <host>', 'Host / IP address of the client')
 .requiredOption('-p, --port <port>', 'Port the client is listening on')
 .requiredOption('-i, --infohash <infohash>', 'Infohash of a torrent on the client (as 40 character hex string)')

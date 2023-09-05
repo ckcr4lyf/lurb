@@ -12,4 +12,8 @@ npm i -g lurb
 
 ## Supported Features
 
-* Connecting to a peer via TCP and performing a handshake
+### Connecting to a peer via TCP and performing a handshake
+
+```
+
+```
