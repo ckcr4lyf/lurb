@@ -1,0 +1,22 @@
+{
+    "compilerOptions": {
+        "target": "ESNext",
+        "module": "ES2022",
+        "noImplicitAny": true,
+        "removeComments": false,
+        "strictNullChecks": true,
+        "preserveConstEnums": true,
+        "esModuleInterop": true,
+        "outDir": "./build/",
+        "sourceMap": true,
+        "moduleResolution": "node",
+        "declaration": true,
+    },
+    "include": [
+        "src/**/*",
+        "__tests__/"
+    ],
+    "exclude": [
+        "node_modules",
+    ]
+}
