@@ -123,7 +123,7 @@ export class Peer {
         const handshakeMessage = Buffer.concat([
             Buffer.alloc(1, 0x13),
             Buffer.from("BitTorrent protocol"),
-            Buffer.alloc(8, 0x00),
+            Buffer.from([0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00]), // Support extensions
             infohash,
             this.peerId,
         ]);
