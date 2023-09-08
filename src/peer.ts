@@ -183,7 +183,14 @@ export class Peer {
 
         // We have all of it
         const message = this.recvBuffer.subarray(4, 4 + messageLen);
-        logger.info(`Got message: ${hexdump(message)}`);
+        // logger.info(`Got message: ${hexdump(message)}`);
+
+        const messageType: MessageTypes = message[0];
+
+        if (messageType === MessageTypes.Bitfield){
+            const bitfield = new Bitifeld(message.subarray(1));
+            console.log(`Got bitfield: ${bitfield}`);
+        }
 
         this.recvBuffer = this.recvBuffer.subarray(4 + messageLen);
         this.consumeMessage();
@@ -191,5 +198,29 @@ export class Peer {
 
     async end(){
         this.client.end();
+    }
+}
+
+enum MessageTypes {
+    Choke = 0x00,
+    Unchoke = 0x01,
+    Bitfield = 0x05,
+    LtepHandshake = 0x14,
+};
+
+type Message = {
+    type: MessageTypes,
+    raw: Buffer
+}
+
+class Bitifeld implements Message {
+    type = MessageTypes.Bitfield;
+
+    constructor(public raw: Buffer){
+
+    }
+
+    toString(){
+        return hexdump(this.raw);
     }
 }
