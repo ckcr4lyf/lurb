@@ -1,5 +1,6 @@
 import { Socket } from "net";
 import { getLogger } from "./logger.js";
+import { hexdump } from "./utils.js";
 
 type Resolver = {
     resolve: (v: unknown) => void,
@@ -92,8 +93,11 @@ export class Peer {
             this.recvBuffer = this.recvBuffer.subarray(68);
             this.status = PeerStatus.IDLE;
             this.resolver.resolve(undefined);
+            // consume the rest
+            this.consumeMessage();
         } else {
             console.log(`Recv Buffer: `, this.recvBuffer);
+            this.consumeMessage();
         }
     }
 
@@ -143,6 +147,46 @@ export class Peer {
         } catch (e){
             logger.error(`Failed to handshake: ${e}`);
         }
+    }
+
+    /**
+     * Technically, after the first 68 bytes of the handshake, the peer would
+     * send a few more BitTorrent messages, such as:
+     * 
+     * 0x00 Choke
+     * 0x01 Unchoke
+     * 0x05 bitfield
+     * 0x14 LTEP Handshake (Extensions)
+     * 
+     * TODO: More
+     * 
+     * This function will try and consume bittorrent messages from the recvBuffer
+     * It will return if there is no complete message
+     */
+    async consumeMessage(){
+        const logger = getLogger();
+        logger.debug(`starting consumeMessage`);
+
+        if (this.recvBuffer.length < 4) {
+            logger.warn(`recvBuffer too small, need more data. (Len: ${this.recvBuffer.length})`);
+            return;
+        }
+
+        const messageLen = this.recvBuffer.subarray(0, 4).readUInt32BE(0);
+        logger.debug(`Message len is ${messageLen}`);
+
+        // Check if we have at least messageLen more bytes in the recvBuffer
+        if (this.recvBuffer.length < 4 + messageLen){
+            logger.warn(`entire message not in recvBuffer!`);
+            return;
+        }
+
+        // We have all of it
+        const message = this.recvBuffer.subarray(4, 4 + messageLen);
+        logger.info(`Got message: ${hexdump(message)}`);
+
+        this.recvBuffer = this.recvBuffer.subarray(4 + messageLen);
+        this.consumeMessage();
     }
 
     async end(){
