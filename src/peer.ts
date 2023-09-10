@@ -170,7 +170,7 @@ export class Peer {
         logger.debug(`starting consumeMessage`);
 
         if (this.recvBuffer.length < 4) {
-            logger.warn(`recvBuffer too small, need more data. (Len: ${this.recvBuffer.length})`);
+            logger.debug(`recvBuffer too small, need more data. (Len: ${this.recvBuffer.length})`);
             return;
         }
 
@@ -179,7 +179,7 @@ export class Peer {
 
         // Check if we have at least messageLen more bytes in the recvBuffer
         if (this.recvBuffer.length < 4 + messageLen){
-            logger.warn(`entire message not in recvBuffer!`);
+            logger.debug(`entire message not in recvBuffer!`);
             return;
         }
 
@@ -192,8 +192,9 @@ export class Peer {
         if (messageType === MessageTypes.Bitfield){
             const bitfield = new Bitifeld(message.subarray(1));
             console.log(`Got bitfield: ${bitfield}`);
-        } else if (messageType === MessageTypes.LtepHandshake){
-            const extended = new LtepHandshake(message.subarray(1))
+        } else if (messageType === MessageTypes.Extended){
+            const extended = new Extended(message.subarray(1))
+            console.log(`Got extended: ${extended}`);
         } else {
             console.log(`Not handling message: ${messageType}`);
         }
@@ -211,7 +212,7 @@ enum MessageTypes {
     Choke = 0x00,
     Unchoke = 0x01,
     Bitfield = 0x05,
-    LtepHandshake = 0x14,
+    Extended = 0x14,
 };
 
 type Message = {
@@ -231,31 +232,40 @@ class Bitifeld implements Message {
     }
 }
 
+// TBD if we need this
 enum ExtendedMessageTypes {
     Handshake = 0x00,
 }
 
-type ExtensionMessage = Message & {
-    extensionType: ExtendedMessageTypes
-}
-
-class LtepHandshake implements ExtensionMessage {
-
-    type = MessageTypes.LtepHandshake;
+class Extended implements Message {
+    type = MessageTypes.Extended;
     extensionType: ExtendedMessageTypes;
     data: any;
+    metadataSize: number;
+    
+    supportedExtensions: Record<string, number>
 
     constructor(public raw: Buffer){
+        const logger = getLogger();
         this.extensionType = raw[0];
+        this.supportedExtensions = {};
         
         const parsed = bencode.decode(raw.subarray(1));
-        console.log(parsed);
-        console.log(typeof parsed);
+
+        this.metadataSize = parsed.metadata_size || 0;
+
+        for (const key of Object.keys(parsed.m)){
+            const value = parsed.m[key];
+            logger.debug(`Got key=${key} with value=${value}`);
+            this.supportedExtensions[key] = value;
+        }
+
+        // console.log(parsed);
+        // console.log(typeof parsed);
         this.data = parsed;
     }
 
     toString(){
-        return 'XD';
+        return `Supported extensions: ${Object.keys(this.supportedExtensions).join(',')}`;
     }
-
 }
