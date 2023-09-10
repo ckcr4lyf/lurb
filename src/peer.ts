@@ -224,3 +224,16 @@ class Bitifeld implements Message {
         return hexdump(this.raw);
     }
 }
+
+class LtepHandshake implements Message {
+    type = MessageTypes.LtepHandshake;
+
+    constructor(public raw: Buffer){
+
+    }
+
+    toString(){
+        
+    }
+
+}
