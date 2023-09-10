@@ -1,3 +1,5 @@
+// @ts-ignore we should get types in here eventually...
+import bencode from 'bencode';
 import { Socket } from "net";
 import { getLogger } from "./logger.js";
 import { hexdump } from "./utils.js";
@@ -190,6 +192,10 @@ export class Peer {
         if (messageType === MessageTypes.Bitfield){
             const bitfield = new Bitifeld(message.subarray(1));
             console.log(`Got bitfield: ${bitfield}`);
+        } else if (messageType === MessageTypes.LtepHandshake){
+            const extended = new LtepHandshake(message.subarray(1))
+        } else {
+            console.log(`Not handling message: ${messageType}`);
         }
 
         this.recvBuffer = this.recvBuffer.subarray(4 + messageLen);
@@ -225,15 +231,31 @@ class Bitifeld implements Message {
     }
 }
 
-class LtepHandshake implements Message {
+enum ExtendedMessageTypes {
+    Handshake = 0x00,
+}
+
+type ExtensionMessage = Message & {
+    extensionType: ExtendedMessageTypes
+}
+
+class LtepHandshake implements ExtensionMessage {
+
     type = MessageTypes.LtepHandshake;
+    extensionType: ExtendedMessageTypes;
+    data: any;
 
     constructor(public raw: Buffer){
-
+        this.extensionType = raw[0];
+        
+        const parsed = bencode.decode(raw.subarray(1));
+        console.log(parsed);
+        console.log(typeof parsed);
+        this.data = parsed;
     }
 
     toString(){
-        
+        return 'XD';
     }
 
 }
