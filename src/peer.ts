@@ -2,7 +2,7 @@
 import bencode from 'bencode';
 import { Socket } from "net";
 import { getLogger } from "./logger.js";
-import { hexdump } from "./utils.js";
+import { completedPieceCount, hexdump } from "./utils.js";
 
 type Resolver = {
     resolve: (v: unknown) => void,
@@ -191,7 +191,7 @@ export class Peer {
 
         if (messageType === MessageTypes.Bitfield){
             const bitfield = new Bitifeld(message.subarray(1));
-            logger.info(`Received bitfield: ${bitfield}`);
+            logger.debug(`Raw bitfield: ${bitfield}`);
         } else if (messageType === MessageTypes.Extended){
             const extended = new Extended(message.subarray(1))
             // console.log(`Got extended: ${extended}`);
@@ -223,8 +223,13 @@ type Message = {
 
 class Bitifeld implements Message {
     type = MessageTypes.Bitfield;
+    completed: number;
 
     constructor(public raw: Buffer){
+        const logger = getLogger();
+        this.completed = completedPieceCount(raw);
+        let perc = (this.completed / (raw.length * 8)) * 100;
+        logger.info(`Received bitfield: ~${perc}% complete`);
 
     }
 
