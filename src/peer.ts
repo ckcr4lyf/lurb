@@ -98,7 +98,7 @@ export class Peer {
             // consume the rest
             this.consumeMessage();
         } else {
-            console.log(`Recv Buffer: `, this.recvBuffer);
+            // console.log(`Recv Buffer: `, this.recvBuffer);
             this.consumeMessage();
         }
     }
@@ -191,10 +191,11 @@ export class Peer {
 
         if (messageType === MessageTypes.Bitfield){
             const bitfield = new Bitifeld(message.subarray(1));
-            console.log(`Got bitfield: ${bitfield}`);
+            logger.info(`Received bitfield: ${bitfield}`);
         } else if (messageType === MessageTypes.Extended){
             const extended = new Extended(message.subarray(1))
-            console.log(`Got extended: ${extended}`);
+            // console.log(`Got extended: ${extended}`);
+            logger.info(extended.toString());
         } else {
             console.log(`Not handling message: ${messageType}`);
         }
@@ -242,6 +243,7 @@ class Extended implements Message {
     extensionType: ExtendedMessageTypes;
     data: any;
     metadataSize: number;
+    clientName: string;
     
     supportedExtensions: Record<string, number>
 
@@ -260,8 +262,14 @@ class Extended implements Message {
             this.supportedExtensions[key] = value;
         }
 
-        // console.log(parsed);
-        // console.log(typeof parsed);
+        this.clientName = (() => {
+            if (parsed.v !== undefined){
+                return parsed.v.toString();
+            }
+
+            return 'UNKNOWN';
+        })();
+
         this.data = parsed;
     }
 
