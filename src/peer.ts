@@ -243,7 +243,7 @@ class Extended implements Message {
     extensionType: ExtendedMessageTypes;
     data: any;
     metadataSize: number;
-    clientName: string;
+    clientName?: string;
     
     supportedExtensions: Record<string, number>
 
@@ -262,14 +262,11 @@ class Extended implements Message {
             this.supportedExtensions[key] = value;
         }
 
-        this.clientName = (() => {
-            if (parsed.v !== undefined){
-                return parsed.v.toString();
-            }
-
-            return 'UNKNOWN';
-        })();
-
+        if (parsed.v !== undefined){
+            this.clientName = Buffer.from(parsed.v).toString();
+            logger.info(`Client: ${this.clientName}`);
+        }
+        
         this.data = parsed;
     }
 
