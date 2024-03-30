@@ -9,7 +9,7 @@
       "version": "0.1.0",
       "license": "GPL-3.0",
       "dependencies": {
-        "@ckcr4lyf/logger": "^0.0.6",
+        "@ckcr4lyf/logger": "^0.0.7",
         "@types/node": "^20.5.9",
         "bencode": "^4.0.0",
         "commander": "^11.0.0"
@@ -37,9 +37,9 @@
       }
     },
     "node_modules/@ckcr4lyf/logger": {
-      "version": "0.0.6",
-      "resolved": "https://registry.npmjs.org/@ckcr4lyf/logger/-/logger-0.0.6.tgz",
-      "integrity": "sha512-ep+HIsUg5PnjcxO74x2HyH6LZ7rky8k0GQpNL8jHpE4LuISm832sAa7rmUa6oG9gQlAh1QW68dBOzNfuaoSZ4A=="
+      "version": "0.0.7",
+      "resolved": "https://registry.npmjs.org/@ckcr4lyf/logger/-/logger-0.0.7.tgz",
+      "integrity": "sha512-Fhb2F1nJpk8YVSS5GiQouF0w7oypFKfUWqcUrN2FboSfYKMksO1AI1enClWUPzzYz+rPhJXIGgoSl2RNCuFlcA=="
     },
     "node_modules/@nodelib/fs.scandir": {
       "version": "2.1.5",

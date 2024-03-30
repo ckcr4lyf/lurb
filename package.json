@@ -43,7 +43,7 @@
     "lurb": "./bin/index.mjs"
   },
   "dependencies": {
-    "@ckcr4lyf/logger": "^0.0.6",
+    "@ckcr4lyf/logger": "^0.0.7",
     "@types/node": "^20.5.9",
     "bencode": "^4.0.0",
     "commander": "^11.0.0"

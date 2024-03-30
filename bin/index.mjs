@@ -12,9 +12,19 @@ program.command('handshake').description('Check if your client is connectable, a
 .requiredOption('-a, --address <address>', 'Host / IP address & port of the client (e.g. 127.0.0.1:1337)')
 .requiredOption('-i, --infohash <infohash>', 'Infohash of a torrent on the client (as 40 character hex string)')
 .option('-v', 'Verbose logging')
+.option('-vv', 'Trace logging')
 .action(async (options) => {
-    // logger.debug(`Called with host=${options.host}, port=${options.port}`);
-    await connectable(options.address, options.infohash, options.v);
+    let loglevel = LOGLEVEL.INFO
+
+    if (options.v === true){
+        loglevel = LOGLEVEL.DEBUG;
+    }
+
+    if (options.Vv === true){
+        loglevel = LOGLEVEL.TRACE;
+    }
+
+    await connectable(options.address, options.infohash, loglevel);
 });
 
 program.parse();

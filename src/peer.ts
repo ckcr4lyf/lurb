@@ -192,7 +192,7 @@ export class Peer {
 
         if (messageType === MessageTypes.Bitfield){
             const bitfield = new Bitifeld(message.subarray(1));
-            logger.debug(`Raw bitfield: ${bitfield}`);
+            logger.trace(`Raw bitfield: ${bitfield}`);
         } else if (messageType === MessageTypes.Extended){
             const extended = new Extended(message.subarray(1))
             // console.log(`Got extended: ${extended}`);

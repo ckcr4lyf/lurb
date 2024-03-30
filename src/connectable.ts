@@ -2,13 +2,9 @@ import { LOGLEVEL, Logger } from "@ckcr4lyf/logger"
 import { Peer } from "./peer.js";
 import { updateLogLevel } from "./logger.js";
 
-export const connectable = async(address: string, hash: string, verbose: boolean) => {
+export const connectable = async(address: string, hash: string, loglevel: LOGLEVEL) => {
 
-    if (verbose === true){
-        updateLogLevel(LOGLEVEL.DEBUG);
-    } else {
-        updateLogLevel(LOGLEVEL.INFO);
-    }
+    updateLogLevel(loglevel);
 
     const [host, port] = address.split(':');
     // const logger = new Logger({loglevel: LOGLEVEL.DEBUG});
