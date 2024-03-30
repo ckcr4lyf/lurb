@@ -71,6 +71,7 @@ export class Peer {
             }
 
             // Make sure it is a legit handshake
+            // i.e. try and parse it.
             const potentialHandshake = this.recvBuffer.subarray(0, 68);
             if (potentialHandshake[0] !== 0x13){
                 logger.error(`First byte not 0x13, dodgy!`);
@@ -196,11 +197,16 @@ export class Peer {
             const extended = new Extended(message.subarray(1))
             // console.log(`Got extended: ${extended}`);
             logger.info(extended.toString());
+        } else if (messageType === MessageTypes.Unchoke){
+            logger.info(`Unchoked by peer!`);
         } else {
-            console.log(`Not handling message: ${messageType}`);
+            logger.error(`Not handling message: ${messageType}`);
         }
 
+        // Remove the parsed message from the recvBuffer
         this.recvBuffer = this.recvBuffer.subarray(4 + messageLen);
+
+        // Call again in case more stuff left
         this.consumeMessage();
     }
 
@@ -229,7 +235,7 @@ class Bitifeld implements Message {
         const logger = getLogger();
         this.completed = completedPieceCount(raw);
         let perc = (this.completed / (raw.length * 8)) * 100;
-        logger.info(`Received bitfield: ~${perc}% complete`);
+        logger.info(`Received bitfield. Approx ~${perc.toFixed(3)}% complete`);
 
     }
 
