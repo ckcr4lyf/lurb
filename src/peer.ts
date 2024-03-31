@@ -262,10 +262,9 @@ class Extended implements Message {
         const logger = getLogger();
         this.extensionType = raw[0];
         this.supportedExtensions = {};
+        this.metadataSize = -1;
         
         const parsed = bencode.decode(raw.subarray(1));
-
-        this.metadataSize = parsed.metadata_size || 0;
 
         for (const key of Object.keys(parsed.m)){
             const value = parsed.m[key];
@@ -276,6 +275,18 @@ class Extended implements Message {
         if (parsed.v !== undefined){
             this.clientName = Buffer.from(parsed.v).toString();
             logger.info(`Client: ${this.clientName}`);
+        }
+
+        if (parsed.metadata_size !== undefined){
+            this.metadataSize = parsed.metadata_size;
+            logger.info(`Metadata size: ${this,this.metadataSize}`);
+
+            /**
+             * TODO: Based on size, determine number of metadata pieces
+             * each piece must be 16KiB (except last one is smaller)
+             * 
+             * Allocate buffer, send requests, and wait for metadata to roll in.
+             */
         }
         
         this.data = parsed;
