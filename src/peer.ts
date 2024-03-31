@@ -2,7 +2,8 @@
 import bencode from 'bencode';
 import { Socket } from "net";
 import { getLogger } from "./logger.js";
-import { completedPieceCount, hexdump } from "./utils.js";
+import { completedPieceCount, getPieceCount, hexdump } from "./utils.js";
+import { METADATA_PIECE_SIZE } from './constants.js';
 
 type Resolver = {
     resolve: (v: unknown) => void,
@@ -32,6 +33,12 @@ export class Peer {
      */
     private recvBuffer: Buffer;
 
+    /**
+     * Here we will store the message_type number for 
+     * the extensions supported, e.g. ut_metadata
+     */
+    private extendedMessageTypes: Record<number, string>;
+
     constructor(private host: string, private port: number){
         const logger = getLogger();
         // this.status = PeerStatus.IDLE;
@@ -56,6 +63,8 @@ export class Peer {
         this.busy = false;
 
         this.recvBuffer = Buffer.alloc(0, 0x00);
+
+        this.extendedMessageTypes = {};
     }
 
     handleRecv(data: Buffer){
@@ -188,7 +197,7 @@ export class Peer {
         const message = this.recvBuffer.subarray(4, 4 + messageLen);
         // logger.info(`Got message: ${hexdump(message)}`);
 
-        const messageType: MessageTypes = message[0];
+        const messageType: number = message[0];
 
         if (messageType === MessageTypes.Bitfield){
             const bitfield = new Bitifeld(message.subarray(1));
@@ -200,7 +209,14 @@ export class Peer {
         } else if (messageType === MessageTypes.Unchoke){
             logger.info(`Unchoked by peer!`);
         } else {
-            logger.error(`Not handling message: ${messageType}`);
+            // Check in case it is one of the extended guys
+            const extendedMessageType = this.extendedMessageTypes[messageType];
+
+            if (extendedMessageType !== undefined){
+                logger.warn(`Got an extended message: ${extendedMessageType}`);
+            } else {
+                logger.error(`Not handling message: ${messageType}`);
+            }
         }
 
         // Remove the parsed message from the recvBuffer
@@ -287,6 +303,9 @@ class Extended implements Message {
              * 
              * Allocate buffer, send requests, and wait for metadata to roll in.
              */
+
+            const pieceCount = getPieceCount(this.metadataSize, METADATA_PIECE_SIZE);
+            logger.debug(`Metadata has ${pieceCount.pieceCount} pieces (Last piece size: ${pieceCount.lastPieceSize})`);
         }
         
         this.data = parsed;
