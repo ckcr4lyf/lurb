@@ -206,6 +206,15 @@ export class Peer {
             const extended = new Extended(message.subarray(1))
             // console.log(`Got extended: ${extended}`);
             logger.info(extended.toString());
+
+            // complete extended handshake
+            const extensionHandshake = extended.extendedHandshakeMessage();
+
+            // request metadata
+            const msg = extended.requestMetadataMessage();
+
+            const dump = Buffer.concat([extensionHandshake, msg]);
+            this.client.write(dump);
         } else if (messageType === MessageTypes.Unchoke){
             logger.info(`Unchoked by peer!`);
         } else {
@@ -227,6 +236,7 @@ export class Peer {
     }
 
     async end(){
+        await new Promise(r => setTimeout(r, 10000));
         this.client.end();
     }
 }
@@ -309,6 +319,58 @@ class Extended implements Message {
         }
         
         this.data = parsed;
+    }
+
+    extendedHandshakeMessage(): Buffer {
+        const payload = {
+            m: {
+                ut_metadata: this.supportedExtensions['ut_metadata']
+            }
+        };
+
+        const bencoded = bencode.encode(payload);
+
+
+        const extendedHandshake = Buffer.concat([
+            Buffer.from([0x14, 0x00]), // Message ID=20 (extended), extension ID=0 (handshake)
+            Buffer.from(bencoded),
+        ]);
+
+        const finalMessage = Buffer.concat([
+            Buffer.from([0x00, 0x00, 0x00, 0x00]), // length prefix, we'll fill it later
+            extendedHandshake,
+        ]);
+
+        finalMessage.writeUInt32BE(extendedHandshake.length, 0);
+
+        return finalMessage;
+    }
+
+    requestMetadataMessage(): Buffer {
+        const requestMetadataMessage = {
+            msg_type: 0,
+            piece: 0
+        };
+
+        const bencoded = bencode.encode(requestMetadataMessage);
+        console.log(`bencoded`, Buffer.from(bencoded).toString());
+
+        // TODO: less hacky
+        const bitTorrentMessage = Buffer.concat([
+            Buffer.from([0x14, this.supportedExtensions['ut_metadata']]),
+            Buffer.from(bencoded),
+        ]);
+
+        const messageLen = bitTorrentMessage.length;
+
+        const finalMessage = Buffer.concat([
+            Buffer.from([0x00, 0x00, 0x00, 0x00]), // length prefix, we'll fill it later
+            bitTorrentMessage,
+        ]);
+
+        finalMessage.writeUInt32BE(messageLen, 0);
+
+        return finalMessage;
     }
 
     toString(){
