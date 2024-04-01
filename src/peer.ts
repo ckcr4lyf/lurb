@@ -4,6 +4,7 @@ import { Socket } from "net";
 import { getLogger } from "./logger.js";
 import { completedPieceCount, getPieceCount, hexdump } from "./utils.js";
 import { METADATA_PIECE_SIZE } from './constants.js';
+import { getMetadataRequestMessage } from './messages/metadata.js';
 
 type Resolver = {
     resolve: (v: unknown) => void,
@@ -44,13 +45,22 @@ export class Peer {
      */
     private extendedMessageStringIdMap: Record<string, number>;
 
-    constructor(private host: string, private port: number){
+    /**
+     * We will allocate this guy w/ size when we get the metadata extended handshake
+     * so that once we request it, we can dump it in here.
+     */
+    private metadata: Buffer;
+    private outstandingMetadataReq: number;
+
+    constructor(private host: string, private port: number) {
         const logger = getLogger();
         // this.status = PeerStatus.IDLE;
         this.status = PeerStatus.HANDSHAKING;
         this.peerId = Buffer.from("-BTTEST-123456789ABC");
         this.client = new Socket();
         this.infohash = Buffer.alloc(0, 0x00);
+        this.metadata = Buffer.alloc(0, 0x00);
+        this.outstandingMetadataReq = 0;
 
         this.client.on('error', (e) => {
             logger.error(`Error on socket: ${e}`);
@@ -73,27 +83,27 @@ export class Peer {
         this.extendedMessageStringIdMap = {};
     }
 
-    handleRecv(data: Buffer){
+    handleRecv(data: Buffer) {
         const logger = getLogger();
 
         this.recvBuffer = Buffer.concat([this.recvBuffer, data]);
         // console.log(this.recvBuffer);
 
-        if (this.status === PeerStatus.HANDSHAKING){
+        if (this.status === PeerStatus.HANDSHAKING) {
             // A handshake reply should be at least 68 bytes(?)
-            if (this.recvBuffer.length < 68){
+            if (this.recvBuffer.length < 68) {
                 return;
             }
 
             // Make sure it is a legit handshake
             // i.e. try and parse it.
             const potentialHandshake = this.recvBuffer.subarray(0, 68);
-            if (potentialHandshake[0] !== 0x13){
+            if (potentialHandshake[0] !== 0x13) {
                 logger.error(`First byte not 0x13, dodgy!`);
                 this.resolver.reject(new Error("INVALID_HANDSHAKE"));
             }
 
-            if (Buffer.compare(potentialHandshake.subarray(1, 20), Buffer.from("BitTorrent protocol")) !== 0){
+            if (Buffer.compare(potentialHandshake.subarray(1, 20), Buffer.from("BitTorrent protocol")) !== 0) {
                 logger.error(`Did not receive "BitTorrent protocol" in Handshake message, dodgy!`);
                 this.resolver.reject(new Error("INVALID_HANDSHAKE"));
             }
@@ -102,7 +112,7 @@ export class Peer {
             const infohash = potentialHandshake.subarray(28, 48);
             const peerId = potentialHandshake.subarray(48, 68);
 
-            if (Buffer.compare(infohash, this.infohash) !== 0){
+            if (Buffer.compare(infohash, this.infohash) !== 0) {
                 logger.error(`Did not receive expected infohash!`);
                 this.resolver.reject(new Error("INVALID_HANDSHAKE"));
             }
@@ -119,7 +129,7 @@ export class Peer {
         }
     }
 
-    async handshake(infohash: Buffer){
+    async handshake(infohash: Buffer) {
         const logger = getLogger();
         this.status = PeerStatus.HANDSHAKING;
         this.infohash = infohash;
@@ -138,7 +148,7 @@ export class Peer {
 
         try {
             await connectPromise;
-        } catch (e){
+        } catch (e) {
             logger.error(`Failed to connect: ${e}`);
         }
 
@@ -151,7 +161,7 @@ export class Peer {
         ]);
 
         const handshakePromise = new Promise((resolve, reject) => {
-            this.resolver = { resolve , reject };
+            this.resolver = { resolve, reject };
         });
 
         logger.debug(`Going to send handshake`);
@@ -162,7 +172,7 @@ export class Peer {
         try {
             await handshakePromise;
             logger.info(`Recevied handshake! (Success)`);
-        } catch (e){
+        } catch (e) {
             logger.error(`Failed to handshake: ${e}`);
         }
     }
@@ -181,21 +191,21 @@ export class Peer {
      * This function will try and consume bittorrent messages from the recvBuffer
      * It will return if there is no complete message
      */
-    async consumeMessage(){
+    async consumeMessage() {
         const logger = getLogger();
         logger.debug(`starting consumeMessage`);
 
         if (this.recvBuffer.length < 4) {
-            logger.debug(`recvBuffer too small, need more data. (Len: ${this.recvBuffer.length})`);
+            logger.trace(`recvBuffer too small, need more data. (Len: ${this.recvBuffer.length})`);
             return;
         }
 
         const messageLen = this.recvBuffer.subarray(0, 4).readUInt32BE(0);
-        logger.debug(`Message len is ${messageLen}`);
+        logger.trace(`Message len is ${messageLen}`);
 
         // Check if we have at least messageLen more bytes in the recvBuffer
-        if (this.recvBuffer.length < 4 + messageLen){
-            logger.debug(`entire message not in recvBuffer!`);
+        if (this.recvBuffer.length < 4 + messageLen) {
+            logger.trace(`entire message not in recvBuffer!`);
             return;
         }
 
@@ -206,42 +216,75 @@ export class Peer {
         const messageType: number = message[0];
         logger.debug(`Got message type: ${messageType}`);
 
-        if (messageType === MessageTypes.Bitfield){
+        if (messageType === MessageTypes.Bitfield) {
             const bitfield = new Bitifeld(message.subarray(1));
             logger.trace(`Raw bitfield: ${bitfield}`);
-        } else if (messageType === MessageTypes.Extended){
+        } else if (messageType === MessageTypes.Extended) {
             const extended = new Extended(message.subarray(1), this.extendedMessageStringIdMap, this.extendedMessageIdStringMap);
-            // console.log(`Got extended: ${extended}`);
 
-            if (extended.extensionType === ExtendedMessageTypes.Handshake){
+            if (extended.extensionType === ExtendedMessageTypes.Handshake) {
                 logger.info(extended.toString());
                 logger.debug(`Received extended handshake, need to complete it...`);
 
                 // update our extension maps
                 this.extendedMessageIdStringMap = extended.supportedExtensionsReverse;
                 this.extendedMessageStringIdMap = extended.supportedExtensions;
-                
+
                 // complete extended handshake
                 const extensionHandshake = extended.extendedHandshakeMessage();
 
-                // request metadata
-                const msg = extended.requestMetadataMessage();
+                // if there is metadata available, we will request it
+                if (extended.metadataMetadata !== undefined) {
+                    logger.debug(`metadata is available!`);
+                    this.metadata = Buffer.alloc(extended.metadataMetadata.size, 0x00);
+                    this.outstandingMetadataReq = extended.metadataMetadata.pieceCount;
 
-                const dump = Buffer.concat([extensionHandshake, msg]);
-                this.client.write(dump);
+                    let metadataReqMessages = [];
+                    for (let i = 0; i < extended.metadataMetadata.pieceCount; i++){
+                        const msg = getMetadataRequestMessage(this.extendedMessageStringIdMap['ut_metadata'], i);
+                        metadataReqMessages.push(msg);
+                    }
+
+                    logger.debug(`prepared ${metadataReqMessages.length} metadata requests.`);
+
+                    const dump = Buffer.concat([
+                        extensionHandshake,
+                        ...metadataReqMessages,
+                    ]);
+
+                    this.client.write(dump);
+                } else {
+                    // no metadata. lets just complete extended handshake.
+                    this.client.write(extensionHandshake);
+                }
             } else {
-                logger.debug(`Recevied some other extension message.`);
+                if (extended.pieceNumber !== undefined && extended.pieceData !== undefined){
+                    logger.debug(`Got some piece data, will set it...`);
+                    const offset = extended.pieceNumber * METADATA_PIECE_SIZE;
+                    this.metadata.set(extended.pieceData, offset);
+                    this.outstandingMetadataReq--;
+
+                    if (this.outstandingMetadataReq === 0){
+                        logger.debug(`recevied all metadata messages`);
+
+                        const m = bencode.decode(this.metadata);
+                        logger.info(`Received metadata. Torrent name is: ${Buffer.from(m.name).toString()}`);
+                        // console.log(`metadata is`, m);
+                    }
+                } else {
+                    logger.debug(`Recevied some other extension message.`);
+                }
             }
 
-            
-        } else if (messageType === MessageTypes.Unchoke){
+
+        } else if (messageType === MessageTypes.Unchoke) {
             logger.info(`Unchoked by peer!`);
         } else {
             // Check in case it is one of the extended guys
             // TODO: Fix, all the extensions come under ID 0x14...
             const extendedMessageType = this.extendedMessageIdStringMap[messageType];
 
-            if (extendedMessageType !== undefined){
+            if (extendedMessageType !== undefined) {
                 logger.warn(`Got an extended message: ${extendedMessageType}`);
             } else {
                 logger.error(`Not handling message: ${messageType}`);
@@ -255,7 +298,7 @@ export class Peer {
         this.consumeMessage();
     }
 
-    async end(){
+    async end() {
         await new Promise(r => setTimeout(r, 10000));
         this.client.end();
     }
@@ -277,7 +320,7 @@ class Bitifeld implements Message {
     type = MessageTypes.Bitfield;
     completed: number;
 
-    constructor(public raw: Buffer){
+    constructor(public raw: Buffer) {
         const logger = getLogger();
         this.completed = completedPieceCount(raw);
         let perc = (this.completed / (raw.length * 8)) * 100;
@@ -285,7 +328,7 @@ class Bitifeld implements Message {
 
     }
 
-    toString(){
+    toString() {
         return hexdump(this.raw);
     }
 }
@@ -295,63 +338,79 @@ class Bitifeld implements Message {
 // but the value DOES NOT relate to the message id.
 enum ExtendedMessageTypes {
     Handshake = 0x00,
-    UtMetadata = 0x01, 
+    UtMetadata = 0x01,
+}
+
+type MetadataMetadata = {
+    size: number,
+    pieceCount: number,
+    lastPieceSize: number,
 }
 
 class Extended implements Message {
     type = MessageTypes.Extended;
     extensionType: ExtendedMessageTypes;
     data: any;
-    metadataSize: number;
+    metadataMetadata: MetadataMetadata | undefined;
     clientName?: string;
-    
+
     supportedExtensions: Record<string, number>
     supportedExtensionsReverse: Record<number, string>
 
-    constructor(public raw: Buffer, supportedExtensions: Record<string, number>, supportedExtensionsReverse: Record<number, string>){
+    pieceNumber: number | undefined;
+    pieceData: Buffer | undefined;
+
+    constructor(public raw: Buffer, supportedExtensions: Record<string, number>, supportedExtensionsReverse: Record<number, string>) {
         const logger = getLogger();
         this.extensionType = raw[0];
         this.supportedExtensions = { ...supportedExtensions };
-        this.supportedExtensionsReverse =  {...supportedExtensionsReverse };
-        this.metadataSize = -1;
+        this.supportedExtensionsReverse = { ...supportedExtensionsReverse };
 
         const parsed = bencode.decode(raw.subarray(1));
 
-        if (this.extensionType === ExtendedMessageTypes.Handshake){
-            for (const key of Object.keys(parsed.m)){
+        if (this.extensionType === ExtendedMessageTypes.Handshake) {
+            for (const key of Object.keys(parsed.m)) {
                 const value = parsed.m[key];
                 logger.debug(`Got key=${key} with value=${value}`);
                 this.supportedExtensions[key] = value;
             }
-    
-            if (parsed.v !== undefined){
+
+            if (parsed.v !== undefined) {
                 this.clientName = Buffer.from(parsed.v).toString();
                 logger.info(`Client: ${this.clientName}`);
             }
-    
-            if (parsed.metadata_size !== undefined){
-                this.metadataSize = parsed.metadata_size;
-                logger.info(`Metadata size: ${this,this.metadataSize}`);
-    
+
+            if (parsed.metadata_size !== undefined) {
+                logger.debug(`Metadata size: ${parsed.metadata_size}`);
+
                 /**
                  * TODO: Based on size, determine number of metadata pieces
                  * each piece must be 16KiB (except last one is smaller)
                  * 
                  * Allocate buffer, send requests, and wait for metadata to roll in.
                  */
-    
-                const pieceCount = getPieceCount(this.metadataSize, METADATA_PIECE_SIZE);
+
+                const pieceCount = getPieceCount(parsed.metadata_size, METADATA_PIECE_SIZE);
                 logger.debug(`Metadata has ${pieceCount.pieceCount} pieces (Last piece size: ${pieceCount.lastPieceSize})`);
+
+                this.metadataMetadata = {
+                    size: parsed.metadata_size,
+                    pieceCount: pieceCount.pieceCount,
+                    lastPieceSize: pieceCount.lastPieceSize,
+                }
             }
-            
+
             this.data = parsed;
-        } else if (this.extensionType === this.supportedExtensions['ut_metadata']){
+        } else if (this.extensionType === this.supportedExtensions['ut_metadata']) {
             logger.debug(`got ut_metadata message!`);
-            console.log(`parsed data`, parsed);
+            // console.log(`parsed data`, parsed);
 
             const bencodeLength = bencode.decode.position;
             const pieceData = raw.subarray(1 + bencodeLength);
-            logger.debug(`Got ${pieceData.length} bytes of piece data.`);
+            logger.trace(`Got ${pieceData.length} bytes of piece data.`);
+
+            this.pieceNumber = parsed.piece;
+            this.pieceData = pieceData;
         } else {
             logger.error(`Got some other extension type: ${this.extensionType}`)
             console.log(this.supportedExtensions);
@@ -410,7 +469,7 @@ class Extended implements Message {
         return finalMessage;
     }
 
-    toString(){
+    toString() {
         return `Supported extensions: ${Object.keys(this.supportedExtensions).join(',')}`;
     }
 }
