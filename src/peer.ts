@@ -37,7 +37,12 @@ export class Peer {
      * Here we will store the message_type number for 
      * the extensions supported, e.g. ut_metadata
      */
-    private extendedMessageTypes: Record<number, string>;
+    private extendedMessageIdStringMap: Record<number, string>;
+    /**
+     * And in this we will store the reverse, i.e. to lookup
+     * the extensionId for a certain extension 
+     */
+    private extendedMessageStringIdMap: Record<string, number>;
 
     constructor(private host: string, private port: number){
         const logger = getLogger();
@@ -64,7 +69,8 @@ export class Peer {
 
         this.recvBuffer = Buffer.alloc(0, 0x00);
 
-        this.extendedMessageTypes = {};
+        this.extendedMessageIdStringMap = {};
+        this.extendedMessageStringIdMap = {};
     }
 
     handleRecv(data: Buffer){
@@ -195,31 +201,45 @@ export class Peer {
 
         // We have all of it
         const message = this.recvBuffer.subarray(4, 4 + messageLen);
-        // logger.info(`Got message: ${hexdump(message)}`);
+        logger.trace(`Got message: ${hexdump(message)}`);
 
         const messageType: number = message[0];
+        logger.debug(`Got message type: ${messageType}`);
 
         if (messageType === MessageTypes.Bitfield){
             const bitfield = new Bitifeld(message.subarray(1));
             logger.trace(`Raw bitfield: ${bitfield}`);
         } else if (messageType === MessageTypes.Extended){
-            const extended = new Extended(message.subarray(1))
+            const extended = new Extended(message.subarray(1), this.extendedMessageStringIdMap, this.extendedMessageIdStringMap);
             // console.log(`Got extended: ${extended}`);
-            logger.info(extended.toString());
 
-            // complete extended handshake
-            const extensionHandshake = extended.extendedHandshakeMessage();
+            if (extended.extensionType === ExtendedMessageTypes.Handshake){
+                logger.info(extended.toString());
+                logger.debug(`Received extended handshake, need to complete it...`);
 
-            // request metadata
-            const msg = extended.requestMetadataMessage();
+                // update our extension maps
+                this.extendedMessageIdStringMap = extended.supportedExtensionsReverse;
+                this.extendedMessageStringIdMap = extended.supportedExtensions;
+                
+                // complete extended handshake
+                const extensionHandshake = extended.extendedHandshakeMessage();
 
-            const dump = Buffer.concat([extensionHandshake, msg]);
-            this.client.write(dump);
+                // request metadata
+                const msg = extended.requestMetadataMessage();
+
+                const dump = Buffer.concat([extensionHandshake, msg]);
+                this.client.write(dump);
+            } else {
+                logger.debug(`Recevied some other extension message.`);
+            }
+
+            
         } else if (messageType === MessageTypes.Unchoke){
             logger.info(`Unchoked by peer!`);
         } else {
             // Check in case it is one of the extended guys
-            const extendedMessageType = this.extendedMessageTypes[messageType];
+            // TODO: Fix, all the extensions come under ID 0x14...
+            const extendedMessageType = this.extendedMessageIdStringMap[messageType];
 
             if (extendedMessageType !== undefined){
                 logger.warn(`Got an extended message: ${extendedMessageType}`);
@@ -271,8 +291,11 @@ class Bitifeld implements Message {
 }
 
 // TBD if we need this
+// for now we just use it to store the enums
+// but the value DOES NOT relate to the message id.
 enum ExtendedMessageTypes {
     Handshake = 0x00,
+    UtMetadata = 0x01, 
 }
 
 class Extended implements Message {
@@ -283,42 +306,56 @@ class Extended implements Message {
     clientName?: string;
     
     supportedExtensions: Record<string, number>
+    supportedExtensionsReverse: Record<number, string>
 
-    constructor(public raw: Buffer){
+    constructor(public raw: Buffer, supportedExtensions: Record<string, number>, supportedExtensionsReverse: Record<number, string>){
         const logger = getLogger();
         this.extensionType = raw[0];
-        this.supportedExtensions = {};
+        this.supportedExtensions = { ...supportedExtensions };
+        this.supportedExtensionsReverse =  {...supportedExtensionsReverse };
         this.metadataSize = -1;
-        
+
         const parsed = bencode.decode(raw.subarray(1));
 
-        for (const key of Object.keys(parsed.m)){
-            const value = parsed.m[key];
-            logger.debug(`Got key=${key} with value=${value}`);
-            this.supportedExtensions[key] = value;
+        if (this.extensionType === ExtendedMessageTypes.Handshake){
+            for (const key of Object.keys(parsed.m)){
+                const value = parsed.m[key];
+                logger.debug(`Got key=${key} with value=${value}`);
+                this.supportedExtensions[key] = value;
+            }
+    
+            if (parsed.v !== undefined){
+                this.clientName = Buffer.from(parsed.v).toString();
+                logger.info(`Client: ${this.clientName}`);
+            }
+    
+            if (parsed.metadata_size !== undefined){
+                this.metadataSize = parsed.metadata_size;
+                logger.info(`Metadata size: ${this,this.metadataSize}`);
+    
+                /**
+                 * TODO: Based on size, determine number of metadata pieces
+                 * each piece must be 16KiB (except last one is smaller)
+                 * 
+                 * Allocate buffer, send requests, and wait for metadata to roll in.
+                 */
+    
+                const pieceCount = getPieceCount(this.metadataSize, METADATA_PIECE_SIZE);
+                logger.debug(`Metadata has ${pieceCount.pieceCount} pieces (Last piece size: ${pieceCount.lastPieceSize})`);
+            }
+            
+            this.data = parsed;
+        } else if (this.extensionType === this.supportedExtensions['ut_metadata']){
+            logger.debug(`got ut_metadata message!`);
+            console.log(`parsed data`, parsed);
+
+            const bencodeLength = bencode.decode.position;
+            const pieceData = raw.subarray(1 + bencodeLength);
+            logger.debug(`Got ${pieceData.length} bytes of piece data.`);
+        } else {
+            logger.error(`Got some other extension type: ${this.extensionType}`)
+            console.log(this.supportedExtensions);
         }
-
-        if (parsed.v !== undefined){
-            this.clientName = Buffer.from(parsed.v).toString();
-            logger.info(`Client: ${this.clientName}`);
-        }
-
-        if (parsed.metadata_size !== undefined){
-            this.metadataSize = parsed.metadata_size;
-            logger.info(`Metadata size: ${this,this.metadataSize}`);
-
-            /**
-             * TODO: Based on size, determine number of metadata pieces
-             * each piece must be 16KiB (except last one is smaller)
-             * 
-             * Allocate buffer, send requests, and wait for metadata to roll in.
-             */
-
-            const pieceCount = getPieceCount(this.metadataSize, METADATA_PIECE_SIZE);
-            logger.debug(`Metadata has ${pieceCount.pieceCount} pieces (Last piece size: ${pieceCount.lastPieceSize})`);
-        }
-        
-        this.data = parsed;
     }
 
     extendedHandshakeMessage(): Buffer {
@@ -353,7 +390,7 @@ class Extended implements Message {
         };
 
         const bencoded = bencode.encode(requestMetadataMessage);
-        console.log(`bencoded`, Buffer.from(bencoded).toString());
+        // console.log(`bencoded`, Buffer.from(bencoded).toString());
 
         // TODO: less hacky
         const bitTorrentMessage = Buffer.concat([
