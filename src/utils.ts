@@ -38,3 +38,20 @@ export const completedPieceCount = (bitfield: Buffer): number => {
     
     return completed;
 }
+
+export const getPieceCount = (size: number, pieceSize: number): { pieceCount: number, lastPieceSize: number} => {
+    const fullPieceCount = Math.floor((size / pieceSize));
+    const leftover = size % pieceSize;
+
+    if (leftover > 0){
+        return {
+            pieceCount: fullPieceCount + 1,
+            lastPieceSize: leftover,
+        }
+    } else {
+        return {
+            pieceCount: fullPieceCount,
+            lastPieceSize: pieceSize,
+        }
+    }
+}
